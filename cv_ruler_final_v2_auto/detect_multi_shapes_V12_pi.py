@@ -16,7 +16,7 @@ ENABLE_LOCAL_IMAGE = 0  # 本地图片模式
 NORMAL_COMPENSATION = 1.013  # 正视模式补偿系数
 OUTLIER_THRESHOLD = 0.2  # 异常值过滤阈值
 HISTORY_LEN = 3  # 历史数据长度
-ORPHAN_ANGLE_THRESHOLD = 15  # 落单角斜率匹配阈值（度）
+remaining_ANGLE_THRESHOLD = 15  # 落单角斜率匹配阈值（度）
 SIDE_LENGTH_TOLERANCE = 0.3  # 边长容忍度（10%）
 
 # 历史数据存储（仅保留外框中轴像素数用于比例计算）
@@ -26,10 +26,12 @@ outer_height_history = []
 outer_vertical_pixels = []
 def save_squares_to_file():
     squares = get_all_squares()
-    with open('squares_data.txt', 'w') as f:
+    with open('squares_data.txt', 'w') as f: #
         for square in squares:
             f.write(f"Vertices: {square.vertices}, Avg Side Length: {square.avg_side_length}\n")
-
+            '''
+            f.write(f"Vertices: {square.vertices}, Avg Side Length: {square.avg_side_length}, Method: {square.detection_method}\n")
+            '''
 
 def get_contour_center(contour):
     """计算轮廓中心点"""
@@ -141,7 +143,7 @@ class SquareInfo:
     vertices: List[Tuple[int, int]]  # 四个顶点坐标 (x,y)
     center: Tuple[int, int]  # 几何中心坐标
     avg_side_length: float  # 平均边长（像素）
-    detection_method: str  # 检测方法："perfect_edge" 或 "orphan_corner"
+    detection_method: str  # 检测方法："perfect_edge" 或 "remaining_corner"
     is_valid: bool = True  # 是否为有效正方形
 
     def __post_init__(self):
@@ -356,13 +358,13 @@ def check_black_region(img, p1, p2, prev_side, step_pixels=30, threshold=0.70):
     raw_normal_dy = curr_dx  # 垂直方向y分量
 
     # 归一化垂直向量（确保长度为1）
-    normal_len = np.hypot(raw_normal_dx, raw_normal_dy)
-    unit_normal_dx = raw_normal_dx / normal_len
+    normal_len = np.hypot(raw_normal_dx, raw_normal_dy) #算一下长度
+    unit_normal_dx = raw_normal_dx / normal_len  #单位法向量
     unit_normal_dy = raw_normal_dy / normal_len
 
     # 应用方向（prev_side控制左右/上下）
     final_normal_dx = unit_normal_dx * prev_side
-    final_normal_dy = unit_normal_dy * prev_side
+    final_normal_dy = unit_normal_dy * prev_side    #掰正法向量朝向
 
     # 存储所有采样点的检测结果
     all_ratios = []
@@ -389,13 +391,13 @@ def check_black_region(img, p1, p2, prev_side, step_pixels=30, threshold=0.70):
         y1 = max(0, test_y - half)
         y2 = min(h, test_y + half + 1)
 
-        region = img[y1:y2, x1:x2]
+        region = img[y1:y2, x1:x2] #左闭右开
         if len(region.shape) == 3:
             region = cv2.cvtColor(region, cv2.COLOR_BGR2GRAY)
         _, binary = cv2.threshold(region, 100, 255, cv2.THRESH_BINARY)
 
         total = binary.size
-        dark = total - cv2.countNonZero(binary)
+        dark = total - cv2.countNonZero(binary)#总减白
         ratio = dark / total if total > 0 else 0.0
         all_ratios.append(ratio)
 
@@ -491,6 +493,7 @@ def detect_perfect_edges_and_squares(contour, img, step_pixels=30):
     original_vertices = approx.reshape(-1, 2)
     num_original = len(original_vertices)
     all_vertices = original_vertices.copy().tolist()
+    num_all_vertice=len(all_vertices)
     processed_edges = set()  # 用于避免重复处理边
     square_groups = []
 
@@ -570,13 +573,13 @@ def detect_perfect_edges_and_squares(contour, img, step_pixels=30):
             continue
 
         # 推测正方形顶点（仅使用prev_side）
-        p3, p4 = infer_square_points(p1, p2, prev_side)
+        p3, p4 = infer_square_points(p1, p2, prev_side)#prev_side含有方向参数,不会出现反向预测的情况
         if p3 is None or p4 is None:
-            continue
+            continue    #防止报错,正常情况不会有问题
 
         # 匹配已有节点
         match3_idx, match3 = find_matching_node(p3, all_vertices)
-        match4_idx, match4 = find_matching_node(p4, all_vertices)
+        match4_idx, match4 = find_matching_node(p4, all_vertices)#应该改成original_vertices
 
         # 初始化原始节点集合
         original_matched_indices = set([p1_idx, p2_idx])
@@ -592,7 +595,7 @@ def detect_perfect_edges_and_squares(contour, img, step_pixels=30):
             cv2.circle(img, p3_final, 5, (0, 255, 255), -1)
 
         # 处理p4
-        if match4_idx is not None and match4_idx < num_original:
+        if match4_idx is not None and match4_idx < num_original: #match4_idx <num_all_vertice
             p4_final = match4
             original_matched_indices.add(match4_idx)
             vertex_status[match4_idx] = "已核验"
@@ -751,46 +754,46 @@ def check_slope_match(slopes1, slopes2):
         return False
 
     # 检查两种可能的匹配方式
-    match1 = (angle_between_slopes(slopes1[0], slopes2[1]) < ORPHAN_ANGLE_THRESHOLD and
-              angle_between_slopes(slopes1[1], slopes2[0]) < ORPHAN_ANGLE_THRESHOLD)
+    match1 = (angle_between_slopes(slopes1[0], slopes2[1]) < remaining_ANGLE_THRESHOLD and
+              angle_between_slopes(slopes1[1], slopes2[0]) < remaining_ANGLE_THRESHOLD)
 
-    match2 = (angle_between_slopes(slopes1[0], slopes2[0]) < ORPHAN_ANGLE_THRESHOLD and
-              angle_between_slopes(slopes1[1], slopes2[1]) < ORPHAN_ANGLE_THRESHOLD)
+    match2 = (angle_between_slopes(slopes1[0], slopes2[0]) < remaining_ANGLE_THRESHOLD and
+              angle_between_slopes(slopes1[1], slopes2[1]) < remaining_ANGLE_THRESHOLD)
 
     return match1 or match2
 
 
-def orphan_corner_method(img, contour, unverified_indices, original_vertices, square_groups):
+def remaining_corner_method(img, contour, unverified_indices, original_vertices, square_groups):
     """落单角法：优化同边点场景判断，增加黑色区域验证"""
     # 获取所有直角点的详细信息
     _, all_right_angles = detect_right_angles(contour, img, return_details=True)
 
     # 筛选出未核验的直角点
-    orphan_corners = [
+    remaining_corners = [
         corner for corner in all_right_angles
         if corner['index'] in unverified_indices
     ]
 
     # 调试输出：落单角数量
     print(f"\n===== 落单角法开始 =====")
-    print(f"检测到未核验的落单角数量: {len(orphan_corners)}")
-    for i, corner in enumerate(orphan_corners):
+    print(f": {len(remaining_corners)}")
+    for i, corner in enumerate(remaining_corners):
         print(f"落单角 {i + 1}: 坐标={corner['point']}, 斜率={corner['slopes']}")
 
     # 至少需要两个落单角才能继续
-    if len(orphan_corners) < 2:
+    if len(remaining_corners) < 2:
         print("落单角数量不足2个，无法进行匹配")
         print("===== 落单角法结束 =====")
         return img, square_groups
 
-    cv2.putText(img, f"落单角数量: {len(orphan_corners)}", (20, 70),
+    cv2.putText(img, f"落单角数量: {len(remaining_corners)}", (20, 70),
                 cv2.FONT_HERSHEY_SIMPLEX, 0.7, (0, 255, 255), 2)
 
     # 检查所有落单角组合
-    for i in range(len(orphan_corners)):
-        for j in range(i + 1, len(orphan_corners)):
-            corner1 = orphan_corners[i]
-            corner2 = orphan_corners[j]
+    for i in range(len(remaining_corners)):
+        for j in range(i + 1, len(remaining_corners)):
+            corner1 = remaining_corners[i]
+            corner2 = remaining_corners[j]
             print(f"\n----- 检查落单角组合: 角{i + 1}与角{j + 1} -----")
 
             # 检查斜率是否匹配
@@ -895,7 +898,7 @@ def orphan_corner_method(img, contour, unverified_indices, original_vertices, sq
                     # 计算平均边长（确保得到有效数值）
                     avg_length = get_square_side_lengths(*sorted_points)
                     # add_square_to_collection(vertices=[(p1, p2, selected_p3, selected_p4)], avg_side=avg_length,
-                    #                          method="orphan_corner")
+                    #                          method="remaining_corner")
                     # 绘制正方形
                     cv2.line(img, tuple(sorted_points[0]), tuple(sorted_points[1]), (128, 0, 128), 2)
                     cv2.line(img, tuple(sorted_points[1]), tuple(sorted_points[2]), (128, 0, 128), 2)
@@ -910,9 +913,9 @@ def orphan_corner_method(img, contour, unverified_indices, original_vertices, sq
                         cv2.putText(img, text, mid_point,
                                     cv2.FONT_HERSHEY_SIMPLEX, 0.9, (0, 255, 255), 2)  # 使用与完美边相同的颜色和大小
 
-                    add_square_to_collection(vertices=sorted_points, avg_side=avg_length, method="orphan_corner")
+                    add_square_to_collection(vertices=sorted_points, avg_side=avg_length, method="remaining_corner")
                     continue
-            # 情况2：同边点场景 - 优化版本，增加黑色区域验证
+            # 情况2：同边点场景 -增加黑色区域验证
             print("进入同边点场景判断")
             # 计算两点距离作为边长
             side_length = distance(p1, p2)
@@ -987,7 +990,7 @@ def orphan_corner_method(img, contour, unverified_indices, original_vertices, sq
             cv2.line(img, tuple(sorted_points[2]), tuple(sorted_points[3]), (128, 0, 128), 2)
             cv2.line(img, tuple(sorted_points[3]), tuple(sorted_points[0]), (128, 0, 128), 2)
 
-            # 简洁文本输出：仅显示 "=数值"，与完美边格式一致
+            # 简洁文本输出：仅显示 "=数值"
             mid_point = ((p1[0] + selected_p3[0]) // 2, (p1[1] + selected_p3[1]) // 2)
             if 0 <= mid_point[0] < img.shape[1] and 0 <= mid_point[1] < img.shape[0]:
                 # 只显示等号和数值，不添加其他文字
@@ -1003,7 +1006,7 @@ def orphan_corner_method(img, contour, unverified_indices, original_vertices, sq
 
             square_groups.append(sorted_points)
             print(f"已创建同边点场景的正方形，平均边长: {avg_length:.1f}像素")
-            add_square_to_collection(vertices=sorted_points, avg_side=avg_length, method="orphan_corner")
+            add_square_to_collection(vertices=sorted_points, avg_side=avg_length, method="remaining_corner")
     print("\n===== 落单角法结束 =====")
     return img, square_groups
 
@@ -1182,7 +1185,7 @@ def process_frame(frame):
 
             # 2. 如果有未核验的顶点，启用落单角法
             if unverified_indices:
-                img, square_groups = orphan_corner_method(img, approx, unverified_indices, original_vertices,
+                img, square_groups = remaining_corner_method(img, approx, unverified_indices, original_vertices,
                                                           square_groups)
 
             # 输出分类结果
