@@ -15,7 +15,7 @@
 
 - [电赛国一翻车最离谱的一集](https://www.bilibili.com/video/BV1yQeEzFE53/?vd_source=2b32370526feca214e420f71e8eaebf1)  
 - [电赛C题 国一级软件方案-开源+代码详解-像素战争(上)](https://www.bilibili.com/video/BV1DphZzrEGn/?vd_source=2b32370526feca214e420f71e8eaebf1)  
-- 电赛C题 国一级软件方案-开源+代码详解-像素战争(中) —— *敬请期待*  
+- [电赛C题 国一级软件方案-开源+代码详解-像素战争(中)](https://www.bilibili.com/video/BV12KQnB8EAQ/?vd_source=2b32370526feca214e420f71e8eaebf1)
 - 电赛C题 国一级软件方案-开源+代码详解-像素战争(下) —— *敬请期待*  
 ---
 # 👉 我的B站主页：[内卷不能](https://space.bilibili.com/457880155?spm_id_from=333.788)
